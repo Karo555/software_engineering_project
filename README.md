@@ -23,11 +23,11 @@ _To be completed once Docker Compose is in place (see issue #5)._
 
 | Role | Member |
 | --- | --- |
-| Project manager | |
-| Frontend developer | |
-| Backend developer | |
-| AI engineer | |
-| Data and QA engineer | |
+| Project manager | Karo555 |
+| Frontend developer | kanwa5000|
+| Backend developer | Aktreides44 |
+| AI engineer | emiliamykowska|
+| Data and QA engineer | majano-pwr |
 
 ## Licence
 
