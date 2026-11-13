@@ -17,7 +17,26 @@ Software Engineering course project, Wrocław University of Science and Technolo
 
 ## Setup
 
-_To be completed once Docker Compose is in place (see issue #5)._
+You need [Docker](https://docs.docker.com/get-docker/) with Compose v2.
+
+```bash
+cp .env.example .env   # then replace the placeholder passwords
+docker compose up      # add --build after changing a Dockerfile or dependencies
+```
+
+| Service | URL |
+| --- | --- |
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 (health check at `/health`) |
+| Neo4j Browser | http://localhost:7474 (user `neo4j`, password from `.env`) |
+| PostgreSQL | `localhost:5432` |
+
+Code in `backend/` and `frontend/` is mounted into the containers and reloads on save.
+Database data is kept in named volumes. `docker compose down` keeps it, and
+`docker compose down -v` deletes it.
+
+If a port is already in use on your machine, override it in `.env`
+(see the optional port settings in `.env.example`).
 
 ## Team
 
