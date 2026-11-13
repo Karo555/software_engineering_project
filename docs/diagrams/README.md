@@ -15,6 +15,7 @@ PlantUML extension for VS Code or JetBrains.
 | Diagram | Source | Issue |
 | --- | --- | --- |
 | Use-case diagram | [use-case.puml](use-case.puml) | #8 |
+| Component diagram | [component.puml](component.puml) | #9 |
 
 ## Use-case diagram
 
@@ -43,3 +44,25 @@ Every high-priority requirement from the specification maps to at least one use 
 | Privacy (non-functional) | Export all data, Delete account |
 
 Medium- and low-priority extensions (M1–M5, L1–L5) are left out until they are planned.
+
+## Component diagram
+
+![Component diagram](component.svg)
+
+The six components match the architecture in section 3 of the specification. In UML 2.5
+notation, a solid line to a circle means the component *provides* that interface, and a
+dashed «use» arrow means it *requires* it.
+
+### Interfaces
+
+| Interface | Provided by | Used by | Purpose |
+| --- | --- | --- | --- |
+| Nodebook REST API | FastAPI backend | React client | All client traffic: JSON over HTTPS, authenticated with a JWT. Documented by the generated OpenAPI schema |
+| Link suggestion | Intelligence layer | FastAPI backend | Embed a saved note and propose up to 5 links with score, type and reason. Runs in the background and is retried on failure |
+| Question answering | Intelligence layer | FastAPI backend | Answer a question from the user's notes and return the cited note ids |
+| Bolt / Cypher | Neo4j | FastAPI backend, intelligence layer | Graph reads and writes, plus vector search. The query agent's tools read Neo4j directly |
+| SQL | PostgreSQL | FastAPI backend | Accounts, chat sessions and chat messages |
+| LLM completion API | External LLM API | Intelligence layer | Prompts for link reasoning, concept extraction and answers, sent through a single swappable LLM client |
+
+Only the intelligence layer talks to the LLM, and only the backend is reachable from the
+client. Concept extraction belongs to extension M2.
