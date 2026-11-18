@@ -19,6 +19,11 @@ Software Engineering course project, Wrocław University of Science and Technolo
 
 _To be completed once Docker Compose is in place (see issue #5)._
 
+## Contributing
+
+Branch naming, commit style, review rules and the Definition of Done are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Team
 
 | Role | Member |
