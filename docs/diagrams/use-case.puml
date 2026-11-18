@@ -1,0 +1,99 @@
+@startuml use-case
+' Nodebook use-case diagram (D3, issue #8).
+' Requirement IDs (H1-H6) follow the project specification; see docs/diagrams/README.md.
+
+title Nodebook · Use-case diagram
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #F7F9FC
+  BorderColor #4A6FA5
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #C9B458
+}
+
+actor "Visitor" as Visitor
+actor "Registered user" as User
+actor "LLM provider" as LLM <<external system>>
+
+rectangle "Nodebook" {
+  ' H1: accounts
+  usecase "Register\n(H1)" as UC_Register
+  usecase "Log in\n(H1)" as UC_Login
+  usecase "Log out\n(H1)" as UC_Logout
+
+  ' H2: notes
+  usecase "Browse daily notes\n(H2)" as UC_Browse
+  usecase "Create note\n(H2)" as UC_Create
+  usecase "Edit note\n(H2)" as UC_Edit
+  usecase "Delete note\n(H2)" as UC_Delete
+  usecase "Open note\n(H2, H5, H6)" as UC_Open
+
+  ' H3/H4: link suggestions
+  usecase "Generate link suggestions\n(H3)" as UC_Suggest
+  usecase "Review link suggestions\n(H4)" as UC_Review
+  usecase "Accept link\n(H4)" as UC_Accept
+  usecase "Reject link\n(H4)" as UC_Reject
+
+  ' H5: graph
+  usecase "Explore knowledge graph\n(H5)" as UC_Graph
+
+  ' H6: question answering
+  usecase "Ask a question\n(H6)" as UC_Ask
+
+  ' Privacy (non-functional requirement)
+  usecase "Export all data\n(privacy)" as UC_Export
+  usecase "Delete account\n(privacy)" as UC_DeleteAccount
+}
+
+Visitor --> UC_Register
+Visitor --> UC_Login
+
+User --> UC_Logout
+User --> UC_Browse
+User --> UC_Create
+User --> UC_Edit
+User --> UC_Delete
+User --> UC_Review
+User --> UC_Graph
+User --> UC_Ask
+User --> UC_Export
+User --> UC_DeleteAccount
+
+UC_Create ..> UC_Suggest : <<include>>
+UC_Edit ..> UC_Suggest : <<include>>
+' Written base-first so extensions are laid out to the right of the use case they extend.
+UC_Review <.. UC_Accept : <<extend>>
+UC_Review <.. UC_Reject : <<extend>>
+UC_Browse <.. UC_Open : <<extend>>
+UC_Graph <.. UC_Open : <<extend>>
+UC_Ask <.. UC_Open : <<extend>>
+
+UC_Suggest --> LLM
+UC_Ask --> LLM
+
+note right of UC_Suggest
+  Runs in the background after a save.
+  Proposes up to 5 links, each with a score
+  and a one-line reason. Only the user's own
+  notes are candidates. An LLM failure never
+  blocks saving the note; the job is retried.
+end note
+
+note right of UC_Ask
+  The answer cites the notes it used.
+  If no relevant note exists, the agent
+  says so rather than answering from
+  general knowledge.
+end note
+
+note bottom of UC_Login
+  Every use case of the registered
+  user requires being logged in.
+end note
+
+@enduml
