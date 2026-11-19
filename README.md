@@ -20,7 +20,7 @@ Software Engineering course project, Wrocław University of Science and Technolo
 You need [Docker](https://docs.docker.com/get-docker/) with Compose v2.
 
 ```bash
-cp .env.example .env   # then replace the placeholder passwords
+cp .env.example .env   # then replace the passwords and set JWT_SECRET (see comments in the file)
 docker compose up      # add --build after changing a Dockerfile or dependencies
 ```
 
