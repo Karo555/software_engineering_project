@@ -1,0 +1,275 @@
+<mxfile host="app.diagrams.net" pages="2">
+  <diagram id="pg" name="PostgreSQL">
+    <mxGraphModel dx="1891" dy="1184" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="pg_box2" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="users" vertex="1">
+          <mxGeometry height="214" width="330" x="60" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r3" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="[PK] id : UUID" vertex="1">
+          <mxGeometry height="22" width="330" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r4" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="email : varchar(320)" vertex="1">
+          <mxGeometry height="22" width="330" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r5" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="password_hash : varchar(255)" vertex="1">
+          <mxGeometry height="22" width="330" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r6" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="display_name : varchar(100) [0..1]" vertex="1">
+          <mxGeometry height="22" width="330" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r7" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : timestamptz" vertex="1">
+          <mxGeometry height="22" width="330" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_sep8" parent="pg_box2" style="line;strokeWidth=1;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;fillColor=none;" value="" vertex="1">
+          <mxGeometry height="8" width="330" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r9" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{PK (id)}" vertex="1">
+          <mxGeometry height="22" width="330" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r10" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{UNIQUE: email}" vertex="1">
+          <mxGeometry height="22" width="330" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r11" parent="pg_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{NOT NULL: email, password_hash, created_at}" vertex="1">
+          <mxGeometry height="22" width="330" y="192" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_box12" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="chat_sessions" vertex="1">
+          <mxGeometry height="192" width="340" x="530" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r13" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="[PK] id : UUID" vertex="1">
+          <mxGeometry height="22" width="340" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r14" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="[FK] user_id : UUID" vertex="1">
+          <mxGeometry height="22" width="340" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r15" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="title : varchar(200)" vertex="1">
+          <mxGeometry height="22" width="340" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r16" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : timestamptz" vertex="1">
+          <mxGeometry height="22" width="340" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_sep17" parent="pg_box12" style="line;strokeWidth=1;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;fillColor=none;" value="" vertex="1">
+          <mxGeometry height="8" width="340" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r18" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{PK (id)}" vertex="1">
+          <mxGeometry height="22" width="340" y="126" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r19" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{FK user_id → users.id ON DELETE CASCADE}" vertex="1">
+          <mxGeometry height="22" width="340" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r20" parent="pg_box12" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{INDEX (user_id)}" vertex="1">
+          <mxGeometry height="22" width="340" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_box21" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="chat_messages" vertex="1">
+          <mxGeometry height="258" width="350" x="1000" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r22" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="[PK] id : UUID" vertex="1">
+          <mxGeometry height="22" width="350" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r23" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="[FK] session_id : UUID" vertex="1">
+          <mxGeometry height="22" width="350" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r24" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="role : varchar(16)" vertex="1">
+          <mxGeometry height="22" width="350" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r25" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="content : text" vertex="1">
+          <mxGeometry height="22" width="350" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r26" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="cited_note_ids : UUID[]" vertex="1">
+          <mxGeometry height="22" width="350" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r27" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : timestamptz" vertex="1">
+          <mxGeometry height="22" width="350" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_sep28" parent="pg_box21" style="line;strokeWidth=1;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;fillColor=none;" value="" vertex="1">
+          <mxGeometry height="8" width="350" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r29" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{PK (id)}" vertex="1">
+          <mxGeometry height="22" width="350" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r30" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{FK session_id → chat_sessions.id" vertex="1">
+          <mxGeometry height="22" width="350" y="192" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r31" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="    ON DELETE CASCADE}" vertex="1">
+          <mxGeometry height="22" width="350" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_r33" parent="pg_box21" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="{INDEX (session_id, created_at)}" vertex="1">
+          <mxGeometry height="22" width="350" y="236" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_e34" edge="1" parent="1" source="pg_box2" style="endArrow=none;startArrow=none;rounded=0;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.269;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="pg_box12" value="has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_el35" connectable="0" parent="pg_e34" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=12;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.8" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pg_el36" connectable="0" parent="pg_e34" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=12;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.8" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pg_e37" edge="1" parent="1" source="pg_box12" style="endArrow=none;startArrow=none;rounded=0;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.206;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="pg_box21" value="contains">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pg_el38" connectable="0" parent="pg_e37" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=12;labelBackgroundColor=#ffffff;" value="1" vertex="1">
+          <mxGeometry relative="1" x="-0.8" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pg_el39" connectable="0" parent="pg_e37" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=12;labelBackgroundColor=#ffffff;" value="0..*" vertex="1">
+          <mxGeometry relative="1" x="0.8" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="neo" name="Neo4j">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="neo_box2" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;fillColor=#cce5ff;strokeColor=#36393d;" value="Note" vertex="1">
+          <mxGeometry height="258" width="320" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r3" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="id : UUID  (PK)" vertex="1">
+          <mxGeometry height="22" width="320" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r4" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="user_id : UUID" vertex="1">
+          <mxGeometry height="22" width="320" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r5" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="content : text" vertex="1">
+          <mxGeometry height="22" width="320" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r6" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="entry_date : date" vertex="1">
+          <mxGeometry height="22" width="320" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r7" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : datetime" vertex="1">
+          <mxGeometry height="22" width="320" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r8" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="updated_at : datetime" vertex="1">
+          <mxGeometry height="22" width="320" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r9" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="embedding : float[384]" vertex="1">
+          <mxGeometry height="22" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_sep10" parent="neo_box2" style="line;strokeWidth=1;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;fillColor=none;" value="" vertex="1">
+          <mxGeometry height="8" width="320" y="184" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r11" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="UNIQUE (id)" vertex="1">
+          <mxGeometry height="22" width="320" y="192" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r12" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="INDEX (user_id)" vertex="1">
+          <mxGeometry height="22" width="320" y="214" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r13" parent="neo_box2" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="VECTOR INDEX (embedding)" vertex="1">
+          <mxGeometry height="22" width="320" y="236" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_box14" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;fillColor=#cce5ff;strokeColor=#36393d;" value="Concept" vertex="1">
+          <mxGeometry height="214" width="320" x="1040" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r15" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="id : UUID  (PK)" vertex="1">
+          <mxGeometry height="22" width="320" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r16" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="user_id : UUID" vertex="1">
+          <mxGeometry height="22" width="320" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r17" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="name : string" vertex="1">
+          <mxGeometry height="22" width="320" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r18" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="normalized_name : string" vertex="1">
+          <mxGeometry height="22" width="320" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r19" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="kind : person | method | topic |" vertex="1">
+          <mxGeometry height="22" width="320" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r20" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="       place | other" vertex="1">
+          <mxGeometry height="22" width="320" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_sep21" parent="neo_box14" style="line;strokeWidth=1;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;fillColor=none;" value="" vertex="1">
+          <mxGeometry height="8" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r22" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="UNIQUE (id)" vertex="1">
+          <mxGeometry height="22" width="320" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r23" parent="neo_box14" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="UNIQUE (user_id, normalized_name)" vertex="1">
+          <mxGeometry height="22" width="320" y="192" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_box24" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;" value="MENTIONS" vertex="1">
+          <mxGeometry height="74" width="280" x="560" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r25" parent="neo_box24" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="confidence : float (0–1)" vertex="1">
+          <mxGeometry height="22" width="280" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r26" parent="neo_box24" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : datetime" vertex="1">
+          <mxGeometry height="22" width="280" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_box27" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;" value="LINKED_TO" vertex="1">
+          <mxGeometry height="250" width="320" x="40" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r28" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="status : suggested | accepted |" vertex="1">
+          <mxGeometry height="22" width="320" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r29" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="         rejected" vertex="1">
+          <mxGeometry height="22" width="320" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r30" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="type : related | supports |" vertex="1">
+          <mxGeometry height="22" width="320" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r31" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="       contradicts | extends |" vertex="1">
+          <mxGeometry height="22" width="320" y="96" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r32" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="       example_of" vertex="1">
+          <mxGeometry height="22" width="320" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r33" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="score : float (0–1)" vertex="1">
+          <mxGeometry height="22" width="320" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r34" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="reason : text" vertex="1">
+          <mxGeometry height="22" width="320" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r35" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="origin : system | user" vertex="1">
+          <mxGeometry height="22" width="320" y="184" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r36" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="created_at : datetime" vertex="1">
+          <mxGeometry height="22" width="320" y="206" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r37" parent="neo_box27" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="decided_at : datetime [0..1]" vertex="1">
+          <mxGeometry height="22" width="320" y="228" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_box38" parent="1" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;html=1;fontSize=13;swimlaneFillColor=#ffffff;" value="RELATED_TO" vertex="1">
+          <mxGeometry height="96" width="320" x="1040" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r39" parent="neo_box38" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="weight : int" vertex="1">
+          <mxGeometry height="22" width="320" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r40" parent="neo_box38" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="  (number of notes in which" vertex="1">
+          <mxGeometry height="22" width="320" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_r41" parent="neo_box38" style="text;align=left;verticalAlign=middle;spacingLeft=8;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=0;fontSize=12;fontFamily=Courier New;fontStyle=0;fillColor=none;" value="   both concepts appear)" vertex="1">
+          <mxGeometry height="22" width="320" y="74" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e42" edge="1" parent="1" source="neo_box2" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERmandOne;endArrow=ERzeroToMany;startFill=0;endFill=0;exitX=1;exitY=0.298;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box24" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e43" edge="1" parent="1" source="neo_box24" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERzeroToMany;endArrow=ERmandOne;startFill=0;endFill=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.36;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box14" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e44" edge="1" parent="1" source="neo_box2" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERmandOne;endArrow=ERzeroToMany;startFill=0;endFill=0;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box27" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e45" edge="1" parent="1" source="neo_box2" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERmandOne;endArrow=ERzeroToMany;startFill=0;endFill=0;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box27" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e46" edge="1" parent="1" source="neo_box14" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERmandOne;endArrow=ERzeroToMany;startFill=0;endFill=0;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box38" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="neo_e47" edge="1" parent="1" source="neo_box14" style="rounded=0;edgeStyle=orthogonalEdgeStyle;startArrow=ERmandOne;endArrow=ERzeroToMany;startFill=0;endFill=0;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;html=1;fontSize=12;labelBackgroundColor=#ffffff;fillColor=none;" target="neo_box38" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
