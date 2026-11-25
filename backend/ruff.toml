@@ -1,0 +1,22 @@
+# The Ruff version is pinned in ../.pre-commit-config.yaml.
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = [
+  "E",     # pycodestyle errors
+  "W",     # pycodestyle warnings
+  "F",     # Pyflakes
+  "I",     # import sorting
+  "B",     # likely bugs
+  "UP",    # modern Python syntax
+  "C4",    # comprehensions
+  "SIM",   # simplifications
+  "ASYNC", # blocking calls in async code
+  "FAST",  # FastAPI
+]
+
+[lint.per-file-ignores]
+# Prompts and evaluation notes are prose, so their lines can be longer than the limit.
+"app/prompts/*" = ["E501"]
+"evaluation/*" = ["E501"]
