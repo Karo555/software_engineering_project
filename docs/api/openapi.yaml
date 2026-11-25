@@ -17,19 +17,28 @@ info:
     - Ids are UUIDs. Timestamps are ISO 8601 in UTC; `entry_date` is a plain date in the
       user's own time zone, always sent by the client.
     - Every error uses the `Error` schema, including validation errors, unknown paths (404)
-      and wrong methods (405).
+      and wrong methods (405). The one exception is `/health`, whose 503 uses `Health` so it
+      can say which dependency is down.
     - Lists return `{ "items": [...], "total": n }`. Paginated lists also take `limit` and `offset`.
 
     **Sessions (H1)**
     - `POST /auth/login` returns a short-lived **access token** in the body and sets a
       **refresh token** in an httpOnly cookie, `nodebook_refresh`
-      (`HttpOnly; SameSite=Lax; Path=/api/v1/auth`, plus `Secure` outside local development).
+      (`HttpOnly; SameSite=Lax; Path=/api/v1/auth`, plus `Secure` when the `COOKIE_SECURE`
+      setting is true).
     - When the access token expires (401 `unauthorized`), the client calls
       `POST /auth/refresh` once and retries. Each refresh rotates the refresh token.
     - A session expires after a period of **inactivity**: a refresh token that hasn't been
-      used for `REFRESH_TOKEN_IDLE_MINUTES` is rejected. Then the client sends the user to login.
+      used for `REFRESH_TOKEN_IDLE_MINUTES` is rejected with 401. Only that 401 sends the
+      user to login. A 5xx or network error during a refresh keeps the session: the client
+      shows an error and tries again later.
     - `POST /auth/logout` revokes the refresh token on the server and clears the cookie.
     - Refresh tokens are stored hashed in PostgreSQL, so they can be revoked.
+    - **A valid access token isn't enough on its own.** For every bearer endpoint, the backend
+      also checks that the token's user still exists (one primary-key lookup in PostgreSQL).
+      If the account has been deleted, the response is 401 `unauthorized`, even if the token
+      hasn't expired. So after `POST /account/delete`, other tabs and devices can't keep
+      writing data.
 
     **Cookies across origins.** The client (`:5173`) and the API (`:8000`) are different
     origins, so the browser only stores or sends the cookie on requests made with
@@ -47,6 +56,9 @@ info:
       `navigator.locks.request("nodebook-refresh", ...)`. The tabs share one cookie jar, so
       a tab that waited for the lock sends the cookie the previous tab just received,
       and its refresh succeeds too.
+    - **Logout uses the same rules.** It waits for any refresh running in its tab, then
+      runs inside the same `nodebook-refresh` lock. Otherwise logout could revoke the old
+      token while a refresh is setting a new one, and the session would survive.
   license:
     name: MIT
 servers:
@@ -162,15 +174,18 @@ paths:
         Revokes the refresh token on the server and clears the cookie. The client also
         drops its access token. It works without an access token, so a user whose access
         token has expired can still log out, and it returns 204 even if there was no session.
+
+        The client must wait for any refresh running in the same tab, and send logout inside
+        the `nodebook-refresh` lock. Otherwise a refresh that has just rotated the token could
+        set a new cookie after logout, and the user would stay logged in.
       security:
         - refreshCookie: []
+        - {}
       responses:
         "204":
           description: Logged out
           headers:
-            Set-Cookie:
-              description: Clears `nodebook_refresh`
-              schema: { type: string }
+            Set-Cookie: { $ref: "#/components/headers/ClearRefreshCookie" }
 
         "500": { $ref: "#/components/responses/InternalError" }
   /auth/me:
@@ -516,9 +531,18 @@ paths:
       operationId: deleteAccount
       summary: Permanently delete the account and all its data
       description: |
-        Deletes the user's notes, concepts and links from Neo4j, and the user's account,
-        chat history and refresh tokens from PostgreSQL, then clears the refresh-token
-        cookie. The password is asked for again to confirm. This can't be undone.
+        Permanently deletes everything, in this order:
+        1. The user row in PostgreSQL, which cascades to chat history and refresh tokens.
+           From this point, every bearer request with this user's access token gets 401,
+           on any tab or device, so nothing new can be written.
+        2. The user's queued and running suggestion jobs. A job also checks that its user
+           still exists before writing, and stops without writing if not.
+        3. The user's notes, concepts and links in Neo4j (everything with this `user_id`).
+
+        Then it clears the refresh-token cookie. The password is asked for again to
+        confirm. This can't be undone. A request that passed its user check just before
+        step 1 could still write a node after step 3, so a periodic cleanup also deletes
+        Neo4j nodes whose `user_id` has no user.
 
         It's a `POST`, not a `DELETE`, because it has a request body and some proxies
         and clients drop the body of a `DELETE`. A wrong password returns **403**
@@ -536,9 +560,7 @@ paths:
         "204":
           description: Account and all data deleted
           headers:
-            Set-Cookie:
-              description: Clears `nodebook_refresh`
-              schema: { type: string }
+            Set-Cookie: { $ref: "#/components/headers/ClearRefreshCookie" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/WrongPassword" }
         "422": { $ref: "#/components/responses/ValidationError" }
@@ -593,7 +615,14 @@ components:
     SetRefreshCookie:
       description: |
         `nodebook_refresh=<token>; HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=<idle timeout>`,
-        plus `Secure` outside local development.
+        plus `Secure` when `COOKIE_SECURE` is true.
+      schema: { type: string }
+    ClearRefreshCookie:
+      description: |
+        `nodebook_refresh=; HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=0`, plus `Secure`
+        when `COOKIE_SECURE` is true. The `Path` must match the one the cookie was set with,
+        or the browser keeps it. Starlette's `delete_cookie` defaults to `Path=/`, so pass
+        `path="/api/v1/auth"` explicitly.
       schema: { type: string }
 
   parameters:
@@ -634,9 +663,11 @@ components:
   responses:
     Unauthorized:
       description: |
-        Missing, invalid or expired access token (or, on `/auth/refresh`, refresh token).
-        On any other endpoint the client calls `POST /auth/refresh` once and retries;
-        if that fails too, it sends the user to login.
+        Missing, invalid or expired access token, or a token whose user has been deleted
+        (on `/auth/refresh`: a missing, revoked or idle refresh token).
+        On any other endpoint the client calls `POST /auth/refresh` once and retries.
+        Only a 401 from that refresh sends the user to login. A 5xx or network error
+        during the refresh keeps the session.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

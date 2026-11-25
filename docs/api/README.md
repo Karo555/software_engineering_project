@@ -55,8 +55,22 @@ so there are two tokens:
 1. A request returns 401 `unauthorized`.
 2. The client calls `POST /auth/refresh` once, then retries the request.
 3. If the refresh also returns 401, the session has expired, and the client sends the user to login (#26).
+   **Only a 401 does this.** A 5xx or network error during the refresh keeps the session: show an
+   error and try again later.
 
 A new tab has no access token yet, so on load it calls `POST /auth/refresh` to pick up the existing session.
+
+**Deleted accounts.** Access tokens aren't stored, so on every bearer endpoint the backend also checks
+that the token's user still exists (one primary-key lookup). After `POST /account/delete`, other tabs
+and devices get 401 straight away instead of writing data for up to 15 minutes. Account deletion runs
+in this order:
+1. Delete the PostgreSQL user row, which cascades to chat history and refresh tokens. From here on,
+   all requests with that user's tokens get 401.
+2. Cancel the user's suggestion jobs. Each job also checks that its user still exists before writing.
+3. Delete everything with that `user_id` in Neo4j.
+
+A periodic cleanup deletes Neo4j nodes whose `user_id` has no user. That catches a request that passed
+its user check just before step 1.
 
 **Send credentials on four requests.** The client (`:5173`) and the API (`:8000`) are different
 origins. The browser only stores or sends the cookie on requests made with
@@ -78,6 +92,14 @@ would make the second one fail with 401 and log the user out. The client prevent
 - **Across tabs:** run the refresh inside `navigator.locks.request("nodebook-refresh", ...)`. Tabs
   share one cookie jar, so a tab that waited for the lock sends the cookie the previous tab just
   received, and its refresh succeeds too.
+- **Logout follows the same rules:** wait for any refresh running in the tab, then send logout inside
+  the same `nodebook-refresh` lock. Otherwise a refresh could rotate the token, logout could revoke
+  the old one, and the refresh response could then set the new cookie, leaving the user logged in.
+
+**Clearing the cookie.** Logout and account deletion send
+`Set-Cookie: nodebook_refresh=; Path=/api/v1/auth; Max-Age=0`, with the same `Path` the cookie was
+set with. Starlette's `delete_cookie` defaults to `Path=/`, which wouldn't clear it, so pass
+`path="/api/v1/auth"`.
 
 ## Suggestions
 
@@ -95,7 +117,8 @@ would make the second one fail with 401 and log the user out. The client prevent
 
 ## Errors
 
-Every error, including validation errors, unknown paths and wrong methods, has the same shape:
+Every error, including validation errors, unknown paths and wrong methods, has the same shape. The
+one exception is `/health`: its 503 uses the `Health` schema, so it can say which dependency is down.
 
 ```json
 {
@@ -163,11 +186,28 @@ from section 4 of the spec, so the prompt should ask for `related`, `supports`, 
 **Settings (#20):** the token lifetimes have to change in three files, because Docker Compose passes
 its own default and overrides the one in `config.py`.
 
-| File | `ACCESS_TOKEN_EXPIRE_MINUTES` | `REFRESH_TOKEN_IDLE_MINUTES` (new) |
-| --- | --- | --- |
-| `backend/app/config.py` | Default 60 → 15 | Add, default 10080, must be > 0 |
-| `compose.yaml` (backend `environment`) | `${ACCESS_TOKEN_EXPIRE_MINUTES:-60}` → `:-15` | Add `${REFRESH_TOKEN_IDLE_MINUTES:-10080}` |
-| `.env.example` | Comment shows 15 | Add as a commented-out line, showing 10080 |
+| File | `ACCESS_TOKEN_EXPIRE_MINUTES` | `REFRESH_TOKEN_IDLE_MINUTES` (new) | `COOKIE_SECURE` (new) |
+| --- | --- | --- | --- |
+| `backend/app/config.py` | Default 60 → 15 | Add, default 10080, must be > 0 | Add, `bool`, default `true` |
+| `compose.yaml` (backend `environment`) | `${ACCESS_TOKEN_EXPIRE_MINUTES:-60}` → `:-15` | Add `${REFRESH_TOKEN_IDLE_MINUTES:-10080}` | Add `${COOKIE_SECURE:-false}` |
+| `.env.example` | Comment shows 15 | Add as a commented-out line, showing 10080 | Add as a commented-out line, explaining it |
 
-**CORS (#16):** set `allow_credentials=True`, with `allow_origins` taken from `CORS_ORIGINS`. A
-wildcard origin isn't allowed with credentials.
+`COOKIE_SECURE` adds `Secure` to the refresh cookie. It defaults to `true` in `config.py`, so a
+deployment is safe unless it opts out. Local Docker Compose sets it to `false`, because
+`http://localhost` has no HTTPS.
+
+**CORS (#16):**
+- Set `allow_credentials=True`, with `allow_origins` taken from `CORS_ORIGINS`. A wildcard origin
+  isn't allowed with credentials.
+- Set `expose_headers=["Retry-After"]`. Otherwise the client can't read it on a 429.
+- Make sure 500 responses get CORS headers, or the browser hides `internal_error` from the client. A
+  handler registered with `@app.exception_handler(Exception)` runs in Starlette's
+  `ServerErrorMiddleware`, which sits outside `CORSMiddleware`, so its response has no CORS headers.
+  Catch unexpected exceptions in a middleware added *before* `CORSMiddleware` instead: Starlette
+  wraps middleware in reverse order, so that one ends up inside CORS.
+
+**Deployment (#58):** `SameSite=Lax` only sends the cookie when the client and the API are on the same
+*site*, meaning the same registrable domain. Examples: `app.example.com` and `api.example.com`, or one
+origin with a reverse proxy in front of both. Locally this holds, because `localhost:5173` and
+`localhost:8000` are the same site. If they're deployed on unrelated domains, the cookie would need
+`SameSite=None; Secure` and CSRF protection, so keep them on one site.
