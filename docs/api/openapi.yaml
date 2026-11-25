@@ -1,0 +1,1036 @@
+openapi: 3.1.0
+info:
+  title: Nodebook API
+  version: 0.1.0-draft
+  summary: REST API between the React client and the FastAPI backend.
+  description: |
+    Draft contract for issue #14. FastAPI will generate the live schema at `/openapi.json`
+    once the endpoints exist. Until then, this file is the reference that the backend,
+    the frontend and the intelligence layer build against. When the code and this file
+    disagree, update whichever one is wrong in the same pull request.
+
+    **Conventions**
+    - Every endpoint needs `Authorization: Bearer <access token>` except `/health`,
+      `/auth/register`, `/auth/login`, `/auth/refresh` and `/auth/logout`.
+    - Every resource belongs to the logged-in user. Another user's resource returns
+      **404**, never 403, so ids can't be probed.
+    - Ids are UUIDs. Timestamps are ISO 8601 in UTC; `entry_date` is a plain date in the
+      user's own time zone, always sent by the client.
+    - Every error uses the `Error` schema, including validation errors, unknown paths (404)
+      and wrong methods (405). The one exception is `/health`, whose 503 uses `Health` so it
+      can say which dependency is down.
+    - Lists return `{ "items": [...], "total": n }`. Paginated lists also take `limit` and `offset`.
+
+    **Sessions (H1)**
+    - `POST /auth/login` returns a short-lived **access token** in the body and sets a
+      **refresh token** in an httpOnly cookie, `nodebook_refresh`
+      (`HttpOnly; SameSite=Lax; Path=/api/v1/auth`, plus `Secure` when the `COOKIE_SECURE`
+      setting is true).
+    - When the access token expires (401 `unauthorized`), the client calls
+      `POST /auth/refresh` once and retries. Each refresh rotates the refresh token.
+    - A session expires after a period of **inactivity**: a refresh token that hasn't been
+      used for `REFRESH_TOKEN_IDLE_MINUTES` is rejected with 401. Only that 401 sends the
+      user to login. A 5xx or network error during a refresh keeps the session: the client
+      shows an error and tries again later.
+    - `POST /auth/logout` revokes the refresh token on the server and clears the cookie.
+    - Refresh tokens are stored hashed in PostgreSQL, so they can be revoked.
+    - **A valid access token isn't enough on its own.** For every bearer endpoint, the backend
+      also checks that the token's user still exists (one primary-key lookup in PostgreSQL).
+      If the account has been deleted, the response is 401 `unauthorized`, even if the token
+      hasn't expired. So after `POST /account/delete`, other tabs and devices can't keep
+      writing data.
+
+    **Cookies across origins.** The client (`:5173`) and the API (`:8000`) are different
+    origins, so the browser only stores or sends the cookie on requests made with
+    `fetch(..., { credentials: "include" })`. These four must use it:
+    `POST /auth/login` (otherwise `Set-Cookie` is ignored), `POST /auth/refresh`,
+    `POST /auth/logout` and `POST /account/delete` (both clear the cookie). The backend's
+    CORS allows credentials, and only from the origins in `CORS_ORIGINS`, never `*`.
+
+    **Concurrent refreshes.** Rotation means a refresh token works only once, so two
+    refreshes with the same cookie would make the second fail with 401 and log the user
+    out. The client prevents this:
+    - **Within a tab,** there is one shared refresh. If several requests get 401 at once,
+      they all wait for the same `POST /auth/refresh` and then retry.
+    - **Across tabs,** the refresh runs inside
+      `navigator.locks.request("nodebook-refresh", ...)`. The tabs share one cookie jar, so
+      a tab that waited for the lock sends the cookie the previous tab just received,
+      and its refresh succeeds too.
+    - **Logout uses the same rules.** It waits for any refresh running in its tab, then
+      runs inside the same `nodebook-refresh` lock. Otherwise logout could revoke the old
+      token while a refresh is setting a new one, and the session would survive.
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development (docker compose up)
+
+tags:
+  - name: auth
+    description: H1. Registration, login and logout
+  - name: notes
+    description: H2. Dated text notes
+  - name: suggestions
+    description: H3/H4. Suggested links and the user's decisions
+  - name: graph
+    description: H5. Notes and accepted links for the graph view
+  - name: chat
+    description: H6. Questions answered from the user's notes, with citations
+  - name: account
+    description: Privacy. Export all data and delete the account
+  - name: health
+    description: Liveness of the API, Neo4j and PostgreSQL
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ------------------------------------------------------------------ auth (H1)
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Account created. The user still has to log in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Log in and start a session
+      description: |
+        Returns an access token and sets the refresh-token cookie. The same 401
+        `invalid_credentials` is returned for an unknown email and a wrong password,
+        so the response doesn't reveal which emails are registered.
+
+        Must be sent with `credentials: "include"`. Otherwise the browser ignores the
+        `Set-Cookie`, because the client and the API are different origins.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SetRefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Token" }
+        "401": { $ref: "#/components/responses/InvalidCredentialsOnLogin" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Get a new access token
+      description: |
+        Exchanges the refresh-token cookie for a new access token and a new refresh token.
+        The old refresh token is revoked. If the cookie is missing, revoked, or has been
+        idle longer than `REFRESH_TOKEN_IDLE_MINUTES`, the session is over: the response is
+        401 and the client sends the user to login.
+
+        Must be sent with `credentials: "include"`, and only one at a time per browser.
+        See "Concurrent refreshes" in the description above.
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: Session extended
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SetRefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Token" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Log out
+      description: |
+        Revokes the refresh token on the server and clears the cookie. The client also
+        drops its access token. It works without an access token, so a user whose access
+        token has expired can still log out, and it returns 204 even if there was no session.
+
+        The client must wait for any refresh running in the same tab, and send logout inside
+        the `nodebook-refresh` lock. Otherwise a refresh that has just rotated the token could
+        set a new cookie after logout, and the user would stay logged in.
+      security:
+        - refreshCookie: []
+        - {}
+      responses:
+        "204":
+          description: Logged out
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/ClearRefreshCookie" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Get the logged-in user
+      responses:
+        "200":
+          description: The current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  # ----------------------------------------------------------------- notes (H2)
+  /notes:
+    get:
+      tags: [notes]
+      operationId: listNotes
+      summary: List notes, newest entry date first
+      parameters:
+        - { $ref: "#/components/parameters/From" }
+        - { $ref: "#/components/parameters/To" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: A page of notes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NoteList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [notes]
+      operationId: createNote
+      summary: Create a note
+      description: |
+        Saves the note with `suggestion_status: pending` and returns at once. Link
+        suggestions are generated in the background, with this note as the `source` of
+        each one. Poll `GET /notes/{note_id}/suggestions` until `status` is `ready` or
+        `failed`. An LLM failure never makes this request fail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoteCreate" }
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /notes/{note_id}:
+    parameters:
+      - { $ref: "#/components/parameters/NoteId" }
+    get:
+      tags: [notes]
+      operationId: getNote
+      summary: Get a note with its accepted links
+      responses:
+        "200":
+          description: The note
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NoteDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    patch:
+      tags: [notes]
+      operationId: updateNote
+      summary: Edit a note
+      description: |
+        If `content` changes:
+        - the embedding is recomputed;
+        - every link to or from this note that is still `suggested` is deleted, because
+          its reason may no longer be true;
+        - `suggestion_status` goes back to `pending` and new suggestions are generated
+          in the background, as when creating a note.
+
+        Accepted and rejected links are always kept. Changing only `entry_date` touches
+        no links.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoteUpdate" }
+      responses:
+        "200":
+          description: Note updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [notes]
+      operationId: deleteNote
+      summary: Delete a note and all of its links
+      responses:
+        "204": { description: Note and its links deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  # -------------------------------------------------------- suggestions (H3/H4)
+  /notes/{note_id}/suggestions:
+    parameters:
+      - { $ref: "#/components/parameters/NoteId" }
+    get:
+      tags: [suggestions]
+      operationId: getNoteSuggestions
+      summary: Get the pending suggestions made for one note
+      description: |
+        Used right after saving a note. Returns only the `suggested` links whose
+        `source` is this note, so there are never more than 5. Suggestions made when
+        *other* notes were saved, with this note as `target`, are in `GET /suggestions`.
+        `status` is the note's `suggestion_status`, which tells the client whether
+        to poll again.
+      responses:
+        "200":
+          description: Suggestion job status and pending suggestions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NoteSuggestions" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /suggestions:
+    get:
+      tags: [suggestions]
+      operationId: listSuggestions
+      summary: List all pending suggestions, best score first
+      description: The review queue across all of the user's notes.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: A page of pending suggestions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LinkList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /suggestions/{link_id}/accept:
+    parameters:
+      - { $ref: "#/components/parameters/LinkId" }
+    post:
+      tags: [suggestions]
+      operationId: acceptSuggestion
+      summary: Accept a suggested link
+      description: The link becomes `accepted` and appears in the graph.
+      responses:
+        "200":
+          description: Link accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Link" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /suggestions/{link_id}/reject:
+    parameters:
+      - { $ref: "#/components/parameters/LinkId" }
+    post:
+      tags: [suggestions]
+      operationId: rejectSuggestion
+      summary: Reject a suggested link
+      description: |
+        The link is kept with status `rejected`, so the same pair of notes
+        is never suggested again.
+      responses:
+        "200":
+          description: Link rejected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Link" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  # ----------------------------------------------------------------- graph (H5)
+  /graph:
+    get:
+      tags: [graph]
+      operationId: getGraph
+      summary: Get notes and accepted links for the graph view
+      description: |
+        Returns every note (optionally limited to an entry-date range) and the accepted
+        links between them. Suggested and rejected links are never included. Must stay
+        fast with 500 notes, so nodes carry a short preview instead of the full content.
+      parameters:
+        - { $ref: "#/components/parameters/From" }
+        - { $ref: "#/components/parameters/To" }
+      responses:
+        "200":
+          description: The user's graph
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Graph" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  # ------------------------------------------------------------------ chat (H6)
+  /chat/sessions:
+    get:
+      tags: [chat]
+      operationId: listChatSessions
+      summary: List chat sessions, most recently used first
+      description: Sorted by `last_message_at`, falling back to `created_at` for a session with no messages yet.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: A page of chat sessions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatSessionList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [chat]
+      operationId: createChatSession
+      summary: Start a chat session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatSessionCreate" }
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatSession" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /chat/sessions/{session_id}:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+    get:
+      tags: [chat]
+      operationId: getChatSession
+      summary: Get a session with all its messages, oldest first
+      responses:
+        "200":
+          description: The session and its messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatSessionDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [chat]
+      operationId: deleteChatSession
+      summary: Delete a session and its messages
+      responses:
+        "204": { description: Session deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /chat/sessions/{session_id}/messages:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+    post:
+      tags: [chat]
+      operationId: askQuestion
+      summary: Ask a question and get a cited answer
+      description: |
+        Runs the query agent and waits for the answer, which should take under 20 seconds.
+        The question and the answer are stored together, in one transaction, **only when
+        the answer succeeds**. If the LLM fails or times out, nothing is stored and the
+        response is 503, so the client can safely send the same question again.
+        If no note is relevant, the answer says so and `citations` is empty.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionCreate" }
+      responses:
+        "201":
+          description: The stored question and the agent's answer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatExchange" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/LlmUnavailable" }
+
+  # -------------------------------------------------------------- account (privacy)
+  /account/export:
+    get:
+      tags: [account]
+      operationId: exportAccount
+      summary: Download all of the user's data as JSON
+      description: 'Sent with `Content-Disposition: attachment; filename="nodebook-export.json"`.'
+      responses:
+        "200":
+          description: Everything stored about the user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountExport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /account/delete:
+    post:
+      tags: [account]
+      operationId: deleteAccount
+      summary: Permanently delete the account and all its data
+      description: |
+        Permanently deletes everything, in this order:
+        1. The user row in PostgreSQL, which cascades to chat history and refresh tokens.
+           From this point, every bearer request with this user's access token gets 401,
+           on any tab or device, so nothing new can be written.
+        2. The user's queued and running suggestion jobs. A job also checks that its user
+           still exists before writing, and stops without writing if not.
+        3. The user's notes, concepts and links in Neo4j (everything with this `user_id`).
+
+        Then it clears the refresh-token cookie. The password is asked for again to
+        confirm. This can't be undone. A request that passed its user check just before
+        step 1 could still write a node after step 3, so a periodic cleanup also deletes
+        Neo4j nodes whose `user_id` has no user.
+
+        It's a `POST`, not a `DELETE`, because it has a request body and some proxies
+        and clients drop the body of a `DELETE`. A wrong password returns **403**
+        `invalid_credentials`, not 401, so the client doesn't treat a typo as an
+        expired session and log the user out. Password attempts are rate-limited, as on login.
+
+        Must be sent with `credentials: "include"`, so the browser accepts the
+        `Set-Cookie` that clears the refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
+      responses:
+        "204":
+          description: Account and all data deleted
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/ClearRefreshCookie" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/WrongPassword" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  # ---------------------------------------------------------------- health
+  /health:
+    servers:
+      - url: http://localhost:8000
+        description: Served at the root, outside /api/v1, for Docker health checks
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Report the status of the API and its databases
+      description: |
+        Returns 200 when every check is `ok`, and 503 with the same body when any
+        dependency is down, so Docker's health check fails. It never includes error
+        details that could reveal hosts or credentials.
+      security: []
+      responses:
+        "200":
+          description: Everything is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: At least one dependency is down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Short-lived access token from `POST /auth/login` or `POST /auth/refresh`.
+        Expires after `ACCESS_TOKEN_EXPIRE_MINUTES` (suggested default 15).
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: nodebook_refresh
+      description: |
+        Opaque refresh token in an httpOnly cookie. Stored hashed in PostgreSQL, rotated
+        on every refresh, revoked on logout, and rejected after
+        `REFRESH_TOKEN_IDLE_MINUTES` without use (suggested default 10080, i.e. 7 days).
+
+  headers:
+    SetRefreshCookie:
+      description: |
+        `nodebook_refresh=<token>; HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=<idle timeout>`,
+        plus `Secure` when `COOKIE_SECURE` is true.
+      schema: { type: string }
+    ClearRefreshCookie:
+      description: |
+        `nodebook_refresh=; HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=0`, plus `Secure`
+        when `COOKIE_SECURE` is true. The `Path` must match the one the cookie was set with,
+        or the browser keeps it. Starlette's `delete_cookie` defaults to `Path=/`, so pass
+        `path="/api/v1/auth"` explicitly.
+      schema: { type: string }
+
+  parameters:
+    NoteId:
+      name: note_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LinkId:
+      name: link_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    From:
+      name: from
+      in: query
+      description: Earliest entry date to include
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      description: Latest entry date to include
+      schema: { type: string, format: date }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    Unauthorized:
+      description: |
+        Missing, invalid or expired access token, or a token whose user has been deleted
+        (on `/auth/refresh`: a missing, revoked or idle refresh token).
+        On any other endpoint the client calls `POST /auth/refresh` once and retries.
+        Only a 401 from that refresh sends the user to login. A 5xx or network error
+        during the refresh keeps the session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: unauthorized, message: "Your session has expired. Please log in again." } }
+    InvalidCredentialsOnLogin:
+      description: Unknown email or wrong password
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: invalid_credentials, message: "Invalid email or password." } }
+    WrongPassword:
+      description: The password given to confirm the action is wrong. The session is still valid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: invalid_credentials, message: "That password is incorrect." } }
+    InternalError:
+      description: An unexpected server error. No internal details are included.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: internal_error, message: "Something went wrong. Please try again." } }
+    NotFound:
+      description: Doesn't exist, or belongs to another user
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: not_found, message: "Note not found." } }
+    Conflict:
+      description: The request clashes with the current state
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: conflict, message: "This suggestion has already been accepted." } }
+    ValidationError:
+      description: The request body or parameters are invalid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: validation_error
+              message: "The request is invalid."
+              details:
+                - { field: "body.password", message: "String should have at least 8 characters" }
+    RateLimited:
+      description: Too many requests. Retry after the number of seconds in the `Retry-After` header.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: rate_limited, message: "Too many requests. Try again in 30 seconds." } }
+    LlmUnavailable:
+      description: The LLM provider failed or timed out
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: llm_unavailable, message: "The assistant is unavailable right now. Try again shortly." } }
+
+  schemas:
+    # ---------------------------------------------------------------- errors
+    Error:
+      description: The single error format used by every endpoint.
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - validation_error
+                - unauthorized
+                - invalid_credentials
+                - not_found
+                - method_not_allowed
+                - conflict
+                - rate_limited
+                - llm_unavailable
+                - internal_error
+              description: Stable, machine-readable. The client switches on this.
+            message:
+              type: string
+              description: Human-readable and safe to show to the user.
+            details:
+              type: array
+              description: Per-field problems. Only present for `validation_error`.
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string, examples: ["body.email"] }
+                  message: { type: string }
+
+    # ------------------------------------------------------------------ auth
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 8, maxLength: 128, format: password }
+        display_name: { type: string, minLength: 1, maxLength: 100 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    Token:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: bearer }
+        expires_in: { type: integer, description: Seconds until the token expires }
+    User:
+      type: object
+      required: [id, email, display_name, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+
+    # ----------------------------------------------------------------- notes
+    NoteCreate:
+      type: object
+      required: [content, entry_date]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 20000 }
+        entry_date:
+          type: string
+          format: date
+          description: |
+            The day the note is about, in the user's own time zone. Always sent by the
+            client: the server runs in UTC, so its "today" is wrong for part of every day.
+    NoteUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        content: { type: string, minLength: 1, maxLength: 20000 }
+        entry_date: { type: string, format: date }
+    SuggestionStatus:
+      type: string
+      enum: [pending, ready, failed]
+      description: |
+        State of the note's background suggestion job, stored on the Note node.
+        `pending`: running (or waiting to retry), so poll again.
+        `ready`: finished; there may be zero suggestions.
+        `failed`: every retry failed; the note is saved but has no suggestions.
+    Note:
+      type: object
+      required: [id, content, entry_date, suggestion_status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        content: { type: string }
+        entry_date: { type: string, format: date }
+        suggestion_status: { $ref: "#/components/schemas/SuggestionStatus" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NoteDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Note" }
+        - type: object
+          required: [links]
+          properties:
+            links:
+              type: array
+              description: Accepted links to and from this note.
+              items: { $ref: "#/components/schemas/Link" }
+    NoteSummary:
+      description: A short reference to a note, used inside links and citations.
+      type: object
+      required: [id, entry_date, preview]
+      properties:
+        id: { type: string, format: uuid }
+        entry_date: { type: string, format: date }
+        preview: { type: string, maxLength: 140, description: The start of the note's content }
+    NoteList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Note" }
+        total: { type: integer }
+
+    # ----------------------------------------------------------- suggestions
+    LinkStatus:
+      type: string
+      enum: [suggested, accepted, rejected]
+    LinkType:
+      type: string
+      enum: [related, supports, contradicts, extends, example_of]
+    Link:
+      description: |
+        A LINKED_TO relationship between two of the user's notes. Suggested, accepted and
+        rejected links share this one structure; `status` records the user's decision.
+
+        **Direction:** `source` is the note whose save produced the suggestion, and `target`
+        is the candidate it was matched with. `type` reads from source to target: for
+        example, `supports` means "source supports target", and `example_of` means "source
+        is an example of target". `related` and `contradicts` read the same either way.
+
+        **One link per pair:** there is at most one link between two notes, in either
+        direction. A pair that already has a link with any status, including `rejected`,
+        is never suggested again.
+      type: object
+      required: [id, source, target, status, type, score, reason, origin, created_at, decided_at]
+      properties:
+        id: { type: string, format: uuid }
+        source: { $ref: "#/components/schemas/NoteSummary" }
+        target: { $ref: "#/components/schemas/NoteSummary" }
+        status: { $ref: "#/components/schemas/LinkStatus" }
+        type: { $ref: "#/components/schemas/LinkType" }
+        score: { type: number, minimum: 0, maximum: 1, description: Similarity score }
+        reason: { type: string, description: One-line explanation of the connection }
+        origin: { type: string, enum: [system, user] }
+        created_at: { type: string, format: date-time }
+        decided_at: { type: [string, "null"], format: date-time }
+    LinkList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Link" }
+        total: { type: integer }
+    NoteSuggestions:
+      type: object
+      required: [status, items]
+      properties:
+        status: { $ref: "#/components/schemas/SuggestionStatus" }
+        items:
+          type: array
+          maxItems: 5
+          description: Links with status `suggested` whose `source` is this note, best score first.
+          items: { $ref: "#/components/schemas/Link" }
+
+    # ----------------------------------------------------------------- graph
+    Graph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items: { $ref: "#/components/schemas/NoteSummary" }
+        edges:
+          type: array
+          description: Accepted links only.
+          items: { $ref: "#/components/schemas/GraphEdge" }
+    GraphEdge:
+      type: object
+      required: [id, source, target, type, score]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, format: uuid, description: Note id }
+        target: { type: string, format: uuid, description: Note id }
+        type: { $ref: "#/components/schemas/LinkType" }
+        score: { type: number, minimum: 0, maximum: 1 }
+
+    # ------------------------------------------------------------------ chat
+    ChatSessionCreate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          description: Defaults to the start of the first question.
+    ChatSession:
+      type: object
+      required: [id, title, created_at, last_message_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        last_message_at:
+          type: [string, "null"]
+          format: date-time
+          description: Time of the newest message, computed from `chat_messages`. Null if there are none yet.
+    ChatSessionList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ChatSession" }
+        total: { type: integer }
+    ChatSessionDetail:
+      allOf:
+        - { $ref: "#/components/schemas/ChatSession" }
+        - type: object
+          required: [messages]
+          properties:
+            messages:
+              type: array
+              items: { $ref: "#/components/schemas/ChatMessage" }
+    QuestionCreate:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000 }
+    ChatMessage:
+      type: object
+      required: [id, role, content, citations, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        citations:
+          type: array
+          description: |
+            The notes the answer used, from `cited_note_ids`. Always empty for `user`
+            messages. A cited note that has since been deleted is left out.
+          items: { $ref: "#/components/schemas/NoteSummary" }
+        created_at: { type: string, format: date-time }
+    ChatExchange:
+      type: object
+      required: [question, answer]
+      properties:
+        question: { $ref: "#/components/schemas/ChatMessage" }
+        answer: { $ref: "#/components/schemas/ChatMessage" }
+
+    # --------------------------------------------------------------- account
+    Health:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks:
+          type: object
+          required: [api, neo4j, postgres]
+          properties:
+            api: { $ref: "#/components/schemas/HealthCheck" }
+            neo4j: { $ref: "#/components/schemas/HealthCheck" }
+            postgres: { $ref: "#/components/schemas/HealthCheck" }
+      example: { status: degraded, checks: { api: ok, neo4j: ok, postgres: down } }
+    HealthCheck:
+      type: string
+      enum: [ok, down]
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, format: password }
+    AccountExport:
+      type: object
+      required: [exported_at, user, notes, links, chat_sessions]
+      properties:
+        exported_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/User" }
+        notes:
+          type: array
+          items: { $ref: "#/components/schemas/Note" }
+        links:
+          type: array
+          description: All links, including suggested and rejected ones.
+          items: { $ref: "#/components/schemas/Link" }
+        chat_sessions:
+          type: array
+          items: { $ref: "#/components/schemas/ChatSessionDetail" }
