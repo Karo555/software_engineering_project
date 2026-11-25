@@ -11,8 +11,9 @@ in VS Code with the *OpenAPI (Swagger) Editor* extension.
 
 ## Endpoints
 
-All paths are under `/api/v1`, except `/health`. Everything except `/health` and `/auth/*`
-needs `Authorization: Bearer <access token>`.
+All paths are under `/api/v1`, except `/health`. Every endpoint needs
+`Authorization: Bearer <access token>` except `/health`, `/auth/register`, `/auth/login`,
+`/auth/refresh` and `/auth/logout`. In particular, `/auth/me` needs one.
 
 | Requirement | Method and path | What it does |
 | --- | --- | --- |
@@ -47,7 +48,7 @@ so there are two tokens:
 | --- | --- | --- |
 | Format | JWT | Random, opaque string |
 | Where the client keeps it | In memory | `nodebook_refresh` httpOnly cookie, `Path=/api/v1/auth` |
-| Lifetime | `ACCESS_TOKEN_EXPIRE_MINUTES` (15 suggested) | Until unused for `REFRESH_TOKEN_IDLE_MINUTES` |
+| Lifetime | `ACCESS_TOKEN_EXPIRE_MINUTES` (default 15) | Until unused for `REFRESH_TOKEN_IDLE_MINUTES` (default 10080, i.e. 7 days) |
 | Server side | Nothing stored | Stored hashed in PostgreSQL; rotated on every refresh; revoked on logout |
 
 **Client flow:**
@@ -55,7 +56,28 @@ so there are two tokens:
 2. The client calls `POST /auth/refresh` once, then retries the request.
 3. If the refresh also returns 401, the session has expired, and the client sends the user to login (#26).
 
-`/auth/refresh` and `/auth/logout` must be sent with credentials, so the cookie is included.
+A new tab has no access token yet, so on load it calls `POST /auth/refresh` to pick up the existing session.
+
+**Send credentials on four requests.** The client (`:5173`) and the API (`:8000`) are different
+origins. The browser only stores or sends the cookie on requests made with
+`fetch(..., { credentials: "include" })`:
+
+| Request | Why it needs credentials |
+| --- | --- |
+| `POST /auth/login` | Otherwise the browser ignores the `Set-Cookie` and every refresh fails |
+| `POST /auth/refresh` | Sends the cookie and stores the rotated one |
+| `POST /auth/logout` | Sends the cookie to revoke, and clears it |
+| `POST /account/delete` | Clears the cookie |
+
+The backend's CORS allows credentials, and only from the origins in `CORS_ORIGINS`, never `*`.
+
+**Only one refresh at a time.** Each refresh token works once, so two refreshes with the same cookie
+would make the second one fail with 401 and log the user out. The client prevents this in two ways:
+- **Within a tab:** keep one shared refresh promise. Every request that gets a 401 while a refresh
+  is running waits for that same refresh, then retries.
+- **Across tabs:** run the refresh inside `navigator.locks.request("nodebook-refresh", ...)`. Tabs
+  share one cookie jar, so a tab that waited for the lock sends the cookie the previous tab just
+  received, and its refresh succeeds too.
 
 ## Suggestions
 
@@ -98,7 +120,7 @@ in #16.
 | 405 | `method_not_allowed` | Wrong HTTP method for the path |
 | 409 | `conflict` | Email already registered; suggestion already accepted or rejected |
 | 422 | `validation_error` | Invalid body, bad UUID in the path, or `limit`/`offset` out of range |
-| 429 | `rate_limited` | Too many requests (`Retry-After` header) |
+| 429 | `rate_limited` | Too many requests, including password attempts on register, login and account deletion (`Retry-After` header) |
 | 500 | `internal_error` | Anything unexpected. No internal details are included. |
 | 503 | `llm_unavailable` | The LLM failed or timed out while answering a question |
 
@@ -138,5 +160,14 @@ user out.
 from section 4 of the spec, so the prompt should ask for `related`, `supports`, `contradicts`,
 `extends` and `example_of`, not just three.
 
-**Settings (#20):** add `REFRESH_TOKEN_IDLE_MINUTES` to `backend/app/config.py` and `.env.example`,
-and lower the `ACCESS_TOKEN_EXPIRE_MINUTES` default to 15.
+**Settings (#20):** the token lifetimes have to change in three files, because Docker Compose passes
+its own default and overrides the one in `config.py`.
+
+| File | `ACCESS_TOKEN_EXPIRE_MINUTES` | `REFRESH_TOKEN_IDLE_MINUTES` (new) |
+| --- | --- | --- |
+| `backend/app/config.py` | Default 60 → 15 | Add, default 10080, must be > 0 |
+| `compose.yaml` (backend `environment`) | `${ACCESS_TOKEN_EXPIRE_MINUTES:-60}` → `:-15` | Add `${REFRESH_TOKEN_IDLE_MINUTES:-10080}` |
+| `.env.example` | Comment shows 15 | Add as a commented-out line, showing 10080 |
+
+**CORS (#16):** set `allow_credentials=True`, with `allow_origins` taken from `CORS_ORIGINS`. A
+wildcard origin isn't allowed with credentials.
