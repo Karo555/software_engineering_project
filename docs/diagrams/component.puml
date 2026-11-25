@@ -1,0 +1,98 @@
+@startuml component
+' Nodebook component diagram (D3, issue #9).
+' Matches the architecture in section 3 of the project specification: six components.
+' Provided interface: solid line to a lollipop. Required interface: dashed <<use>> arrow to it.
+
+title Nodebook · Component diagram
+skinparam shadowing false
+skinparam componentStyle uml2
+skinparam defaultTextAlignment center
+skinparam component {
+  BackgroundColor #F7F9FC
+  BorderColor #4A6FA5
+}
+skinparam database {
+  BackgroundColor #F2F7F2
+  BorderColor #5B8C5A
+}
+skinparam interface {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #C9B458
+}
+
+component "React client\n<<browser>>" as Client {
+  component "Note editor" as Editor
+  component "Graph view\n(Cytoscape.js)" as GraphView
+  component "Chat panel" as ChatPanel
+  component "API client\n(TanStack Query)" as ApiClient
+}
+
+component "FastAPI backend" as Backend {
+  component "REST routers\nauth · notes · suggestions\ngraph · chat · account" as Routers
+  component "Authentication\n(JWT)" as Auth
+  component "Graph repository" as GraphRepo
+  component "Account & chat\nrepository\n(SQLAlchemy)" as SqlRepo
+}
+
+component "Intelligence layer" as AI {
+  component "Embeddings\n(sentence-transformers)" as Embeddings
+  component "Link suggester" as Suggester
+  component "Query agent\n(LangGraph)" as Agent
+  component "Concept extraction\n(M2)" as Concepts
+  component "LLM client\n(swappable adapter)" as LlmClient
+}
+
+database "Neo4j 5\nnotes · concepts · links\nvector index" as Neo4j
+database "PostgreSQL\naccounts · chat history" as Postgres
+component "External LLM API\n<<external>>\nOpenAI or Anthropic" as LLM #FFFFFF;line.dashed
+
+' ---- Interfaces ----
+interface "Nodebook REST API\nJSON over HTTPS · JWT" as I_REST
+interface "Link suggestion" as I_Suggest
+interface "Question answering" as I_Ask
+interface "Bolt / Cypher" as I_Bolt
+interface "SQL" as I_SQL
+interface "LLM completion API\nHTTPS" as I_LLM
+
+' ---- Wiring between the six components ----
+Client ..> I_REST : <<use>>
+Backend -up- I_REST
+
+AI -up- I_Suggest
+AI -up- I_Ask
+Backend ..> I_Suggest : <<use>>
+Backend ..> I_Ask : <<use>>
+
+Neo4j -up- I_Bolt
+Backend ..> I_Bolt : <<use>>
+AI ..> I_Bolt : <<use>>\ngraph & vector\nsearch tools
+
+Postgres -up- I_SQL
+Backend ..> I_SQL : <<use>>
+
+LLM -up- I_LLM
+AI ..> I_LLM : <<use>>\nprompts
+
+' Keep the layout close to the figure in the specification.
+AI -[hidden]right- Neo4j
+Neo4j -[hidden]right- Postgres
+
+note right of Client
+  Talks only to the REST API.
+end note
+
+note bottom of LLM
+  Only the intelligence layer calls the LLM,
+  through one adapter, so the provider
+  can be replaced.
+end note
+
+note bottom of Neo4j
+  Every query is filtered by user_id.
+end note
+
+@enduml
