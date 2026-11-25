@@ -73,6 +73,9 @@ def test_validation_errors_do_not_print_secrets(
     secrets = [VALID_ENV["POSTGRES_PASSWORD"], VALID_ENV["NEO4J_PASSWORD"], VALID_ENV["JWT_SECRET"]]
     for secret in [*secrets, "too-short-secret"]:
         assert secret not in message
+    # pydantic truncates long input in its message, so a secret might be cut off even when
+    # inputs are shown. Check that no input is shown at all.
+    assert "input_value" not in message
     assert change.lower() in message  # still says which variable is wrong
 
 
