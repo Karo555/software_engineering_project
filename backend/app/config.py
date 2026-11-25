@@ -16,7 +16,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # env_ignore_empty: `LLM_API_KEY=` counts as not set, and an empty required value is missing.
-    model_config = SettingsConfigDict(case_sensitive=False, extra="ignore", env_ignore_empty=True)
+    # hide_input_in_errors: a validation error names the variable but never prints its value,
+    # which could be a secret.
+    model_config = SettingsConfigDict(
+        case_sensitive=False,
+        extra="ignore",
+        env_ignore_empty=True,
+        hide_input_in_errors=True,
+    )
 
     # PostgreSQL (accounts and chat history)
     postgres_user: str

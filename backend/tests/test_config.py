@@ -47,6 +47,35 @@ def test_short_jwt_secret_fails(env: pytest.MonkeyPatch) -> None:
         Settings()
 
 
+def test_short_neo4j_password_fails(env: pytest.MonkeyPatch) -> None:
+    env.setenv("NEO4J_PASSWORD", "seven77")
+    with pytest.raises(ValidationError, match="neo4j_password"):
+        Settings()
+
+
+@pytest.mark.parametrize(
+    ("change", "value"),
+    [
+        ("POSTGRES_DB", None),  # missing value: pydantic would print every input
+        ("JWT_SECRET", "too-short-secret"),  # invalid value: pydantic would print it
+    ],
+)
+def test_validation_errors_do_not_print_secrets(
+    env: pytest.MonkeyPatch, change: str, value: str | None
+) -> None:
+    if value is None:
+        env.delenv(change)
+    else:
+        env.setenv(change, value)
+    with pytest.raises(ValidationError) as excinfo:
+        Settings()
+    message = str(excinfo.value)
+    secrets = [VALID_ENV["POSTGRES_PASSWORD"], VALID_ENV["NEO4J_PASSWORD"], VALID_ENV["JWT_SECRET"]]
+    for secret in [*secrets, "too-short-secret"]:
+        assert secret not in message
+    assert change.lower() in message  # still says which variable is wrong
+
+
 def test_database_url_escapes_special_characters(env: pytest.MonkeyPatch) -> None:
     env.setenv("POSTGRES_PASSWORD", "p@ss:w/rd")
     env.setenv("POSTGRES_HOST", "postgres")
