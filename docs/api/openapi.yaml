@@ -10,13 +10,27 @@ info:
     disagree, update whichever one is wrong in the same pull request.
 
     **Conventions**
-    - All endpoints except `/health`, `/auth/register` and `/auth/login` need
-      `Authorization: Bearer <token>`.
+    - All endpoints except `/health` and `/auth/*` need `Authorization: Bearer <access token>`.
     - Every resource belongs to the logged-in user. Another user's resource returns
       **404**, never 403, so ids can't be probed.
-    - Ids are UUIDs. Timestamps are ISO 8601 in UTC; `entry_date` is a plain date.
-    - Every error uses the `Error` schema, including validation errors.
+    - Ids are UUIDs. Timestamps are ISO 8601 in UTC; `entry_date` is a plain date in the
+      user's own time zone, always sent by the client.
+    - Every error uses the `Error` schema, including validation errors, unknown paths (404)
+      and wrong methods (405).
     - Lists return `{ "items": [...], "total": n }`. Paginated lists also take `limit` and `offset`.
+
+    **Sessions (H1)**
+    - `POST /auth/login` returns a short-lived **access token** in the body and sets a
+      **refresh token** in an httpOnly cookie, `nodebook_refresh`
+      (`HttpOnly; SameSite=Lax; Path=/api/v1/auth`, plus `Secure` outside local development).
+    - When the access token expires (401 `unauthorized`), the client calls
+      `POST /auth/refresh` once and retries. Each refresh rotates the refresh token.
+    - A session expires after a period of **inactivity**: a refresh token that hasn't been
+      used for `REFRESH_TOKEN_IDLE_MINUTES` is rejected. Then the client sends the user to login.
+    - `POST /auth/logout` revokes the refresh token on the server and clears the cookie.
+    - Refresh tokens are stored hashed in PostgreSQL, so they can be revoked.
+    - Requests to `/auth/refresh` and `/auth/logout` must be sent with credentials
+      (`fetch(..., { credentials: "include" })`), and CORS allows credentials from the frontend origin.
   license:
     name: MIT
 servers:
@@ -36,6 +50,8 @@ tags:
     description: H6. Questions answered from the user's notes, with citations
   - name: account
     description: Privacy. Export all data and delete the account
+  - name: health
+    description: Liveness of the API, Neo4j and PostgreSQL
 
 security:
   - bearerAuth: []
@@ -63,13 +79,15 @@ paths:
         "422": { $ref: "#/components/responses/ValidationError" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   /auth/login:
     post:
       tags: [auth]
       operationId: login
-      summary: Log in and get an access token
+      summary: Log in and start a session
       description: |
-        The same 401 is returned for an unknown email and a wrong password,
+        Returns an access token and sets the refresh-token cookie. The same 401
+        `invalid_credentials` is returned for an unknown email and a wrong password,
         so the response doesn't reveal which emails are registered.
       security: []
       requestBody:
@@ -80,26 +98,59 @@ paths:
       responses:
         "200":
           description: Logged in
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SetRefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Token" }
+        "401": { $ref: "#/components/responses/InvalidCredentialsOnLogin" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Get a new access token
+      description: |
+        Exchanges the refresh-token cookie for a new access token and a new refresh token.
+        The old refresh token is revoked. If the cookie is missing, revoked, or has been
+        idle longer than `REFRESH_TOKEN_IDLE_MINUTES`, the session is over: the response is
+        401 and the client sends the user to login.
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: Session extended
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SetRefreshCookie" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Token" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "422": { $ref: "#/components/responses/ValidationError" }
-        "429": { $ref: "#/components/responses/RateLimited" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   /auth/logout:
     post:
       tags: [auth]
       operationId: logout
       summary: Log out
       description: |
-        The client discards its token. Tokens are stateless JWTs, so the server doesn't
-        keep a list of revoked ones; a token stops working when it expires (60 minutes
-        by default). Server-side revocation can be added later with a denylist table.
+        Revokes the refresh token on the server and clears the cookie. The client also
+        drops its access token. It works without an access token, so a user whose access
+        token has expired can still log out, and it returns 204 even if there was no session.
+      security:
+        - refreshCookie: []
       responses:
-        "204": { description: Logged out }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+        "204":
+          description: Logged out
+          headers:
+            Set-Cookie:
+              description: Clears `nodebook_refresh`
+              schema: { type: string }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   /auth/me:
     get:
       tags: [auth]
@@ -113,6 +164,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   # ----------------------------------------------------------------- notes (H2)
   /notes:
     get:
@@ -132,14 +184,16 @@ paths:
               schema: { $ref: "#/components/schemas/NoteList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
     post:
       tags: [notes]
       operationId: createNote
       summary: Create a note
       description: |
-        Saves the note and returns at once. Link suggestions are generated in the
-        background. Poll `GET /notes/{note_id}/suggestions` until `status` is
-        `ready` or `failed`. An LLM failure never makes this request fail.
+        Saves the note with `suggestion_status: pending` and returns at once. Link
+        suggestions are generated in the background, with this note as the `source` of
+        each one. Poll `GET /notes/{note_id}/suggestions` until `status` is `ready` or
+        `failed`. An LLM failure never makes this request fail.
       requestBody:
         required: true
         content:
@@ -154,6 +208,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   /notes/{note_id}:
     parameters:
       - { $ref: "#/components/parameters/NoteId" }
@@ -169,13 +224,22 @@ paths:
               schema: { $ref: "#/components/schemas/NoteDetail" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
     patch:
       tags: [notes]
       operationId: updateNote
       summary: Edit a note
       description: |
-        Changing `content` updates the embedding and generates new suggestions in the
-        background, as when creating a note. Existing accepted and rejected links are kept.
+        If `content` changes:
+        - the embedding is recomputed;
+        - every link to or from this note that is still `suggested` is deleted, because
+          its reason may no longer be true;
+        - `suggestion_status` goes back to `pending` and new suggestions are generated
+          in the background, as when creating a note.
+
+        Accepted and rejected links are always kept. Changing only `entry_date` touches
+        no links.
       requestBody:
         required: true
         content:
@@ -190,6 +254,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
     delete:
       tags: [notes]
       operationId: deleteNote
@@ -199,6 +264,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   # -------------------------------------------------------- suggestions (H3/H4)
   /notes/{note_id}/suggestions:
     parameters:
@@ -206,10 +273,13 @@ paths:
     get:
       tags: [suggestions]
       operationId: getNoteSuggestions
-      summary: Get the pending suggestions for one note
+      summary: Get the pending suggestions made for one note
       description: |
-        Used right after saving a note. `status` tells the client whether the
-        background job is still running, so it knows whether to poll again.
+        Used right after saving a note. Returns only the `suggested` links whose
+        `source` is this note, so there are never more than 5. Suggestions made when
+        *other* notes were saved, with this note as `target`, are in `GET /suggestions`.
+        `status` is the note's `suggestion_status`, which tells the client whether
+        to poll again.
       responses:
         "200":
           description: Suggestion job status and pending suggestions
@@ -219,6 +289,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   /suggestions:
     get:
       tags: [suggestions]
@@ -236,6 +308,8 @@ paths:
               schema: { $ref: "#/components/schemas/LinkList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   /suggestions/{link_id}/accept:
     parameters:
       - { $ref: "#/components/parameters/LinkId" }
@@ -254,6 +328,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   /suggestions/{link_id}/reject:
     parameters:
       - { $ref: "#/components/parameters/LinkId" }
@@ -274,6 +350,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   # ----------------------------------------------------------------- graph (H5)
   /graph:
     get:
@@ -296,12 +374,14 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   # ------------------------------------------------------------------ chat (H6)
   /chat/sessions:
     get:
       tags: [chat]
       operationId: listChatSessions
-      summary: List chat sessions, most recent first
+      summary: List chat sessions, most recently used first
+      description: Sorted by `last_message_at`, falling back to `created_at` for a session with no messages yet.
       parameters:
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
@@ -312,6 +392,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ChatSessionList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
     post:
       tags: [chat]
       operationId: createChatSession
@@ -330,6 +412,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+        "500": { $ref: "#/components/responses/InternalError" }
   /chat/sessions/{session_id}:
     parameters:
       - { $ref: "#/components/parameters/SessionId" }
@@ -345,6 +428,8 @@ paths:
               schema: { $ref: "#/components/schemas/ChatSessionDetail" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
     delete:
       tags: [chat]
       operationId: deleteChatSession
@@ -354,6 +439,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "500": { $ref: "#/components/responses/InternalError" }
   /chat/sessions/{session_id}/messages:
     parameters:
       - { $ref: "#/components/parameters/SessionId" }
@@ -362,10 +449,11 @@ paths:
       operationId: askQuestion
       summary: Ask a question and get a cited answer
       description: |
-        Stores the question, runs the query agent and stores its answer. Waits for the
-        answer, which should take under 20 seconds. If no note is relevant, the answer
-        says so and `citations` is empty. If the LLM is unavailable, the question is
-        still stored and the response is 503.
+        Runs the query agent and waits for the answer, which should take under 20 seconds.
+        The question and the answer are stored together, in one transaction, **only when
+        the answer succeeds**. If the LLM fails or times out, nothing is stored and the
+        response is 503, so the client can safely send the same question again.
+        If no note is relevant, the answer says so and `citations` is empty.
       requestBody:
         required: true
         content:
@@ -381,6 +469,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/LlmUnavailable" }
 
   # -------------------------------------------------------------- account (privacy)
@@ -398,24 +487,63 @@ paths:
               schema: { $ref: "#/components/schemas/AccountExport" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /account:
-    delete:
+        "500": { $ref: "#/components/responses/InternalError" }
+  /account/delete:
+    post:
       tags: [account]
       operationId: deleteAccount
       summary: Permanently delete the account and all its data
       description: |
-        Deletes the user's notes, concepts and links from Neo4j and the user's account
-        and chat history from PostgreSQL. The password is asked for again to confirm.
-        This can't be undone.
+        Deletes the user's notes, concepts and links from Neo4j, and the user's account,
+        chat history and refresh tokens from PostgreSQL, then clears the refresh-token
+        cookie. The password is asked for again to confirm. This can't be undone.
+
+        It's a `POST`, not a `DELETE`, because it has a request body and some proxies
+        and clients drop the body of a `DELETE`. A wrong password returns **403**
+        `invalid_credentials`, not 401, so the client doesn't treat a typo as an
+        expired session and log the user out.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
       responses:
-        "204": { description: Account and all data deleted }
+        "204":
+          description: Account and all data deleted
+          headers:
+            Set-Cookie:
+              description: Clears `nodebook_refresh`
+              schema: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/WrongPassword" }
         "422": { $ref: "#/components/responses/ValidationError" }
+
+        "500": { $ref: "#/components/responses/InternalError" }
+  # ---------------------------------------------------------------- health
+  /health:
+    servers:
+      - url: http://localhost:8000
+        description: Served at the root, outside /api/v1, for Docker health checks
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Report the status of the API and its databases
+      description: |
+        Returns 200 when every check is `ok`, and 503 with the same body when any
+        dependency is down, so Docker's health check fails. It never includes error
+        details that could reveal hosts or credentials.
+      security: []
+      responses:
+        "200":
+          description: Everything is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: At least one dependency is down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
 
 components:
   securitySchemes:
@@ -423,7 +551,24 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Access token from `POST /auth/login`. Expires after `ACCESS_TOKEN_EXPIRE_MINUTES` (default 60).
+      description: |
+        Short-lived access token from `POST /auth/login` or `POST /auth/refresh`.
+        Expires after `ACCESS_TOKEN_EXPIRE_MINUTES` (15 is suggested; set in #20).
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: nodebook_refresh
+      description: |
+        Opaque refresh token in an httpOnly cookie. Stored hashed in PostgreSQL, rotated
+        on every refresh, revoked on logout, and rejected after
+        `REFRESH_TOKEN_IDLE_MINUTES` without use.
+
+  headers:
+    SetRefreshCookie:
+      description: |
+        `nodebook_refresh=<token>; HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=<idle timeout>`,
+        plus `Secure` outside local development.
+      schema: { type: string }
 
   parameters:
     NoteId:
@@ -462,11 +607,32 @@ components:
 
   responses:
     Unauthorized:
-      description: Missing, invalid or expired token, or wrong credentials
+      description: |
+        Missing, invalid or expired access token (or, on `/auth/refresh`, refresh token).
+        On any other endpoint the client calls `POST /auth/refresh` once and retries;
+        if that fails too, it sends the user to login.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-          example: { error: { code: unauthorized, message: "Invalid email or password." } }
+          example: { error: { code: unauthorized, message: "Your session has expired. Please log in again." } }
+    InvalidCredentialsOnLogin:
+      description: Unknown email or wrong password
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: invalid_credentials, message: "Invalid email or password." } }
+    WrongPassword:
+      description: The password given to confirm the action is wrong. The session is still valid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: invalid_credentials, message: "That password is incorrect." } }
+    InternalError:
+      description: An unexpected server error. No internal details are included.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: internal_error, message: "Something went wrong. Please try again." } }
     NotFound:
       description: Doesn't exist, or belongs to another user
       content:
@@ -519,7 +685,16 @@ components:
           properties:
             code:
               type: string
-              enum: [validation_error, unauthorized, not_found, conflict, rate_limited, llm_unavailable, internal_error]
+              enum:
+                - validation_error
+                - unauthorized
+                - invalid_credentials
+                - not_found
+                - method_not_allowed
+                - conflict
+                - rate_limited
+                - llm_unavailable
+                - internal_error
               description: Stable, machine-readable. The client switches on this.
             message:
               type: string
@@ -567,26 +742,37 @@ components:
     # ----------------------------------------------------------------- notes
     NoteCreate:
       type: object
-      required: [content]
+      required: [content, entry_date]
       properties:
         content: { type: string, minLength: 1, maxLength: 20000 }
         entry_date:
           type: string
           format: date
-          description: The day the note is about. Defaults to today.
+          description: |
+            The day the note is about, in the user's own time zone. Always sent by the
+            client: the server runs in UTC, so its "today" is wrong for part of every day.
     NoteUpdate:
       type: object
       minProperties: 1
       properties:
         content: { type: string, minLength: 1, maxLength: 20000 }
         entry_date: { type: string, format: date }
+    SuggestionStatus:
+      type: string
+      enum: [pending, ready, failed]
+      description: |
+        State of the note's background suggestion job, stored on the Note node.
+        `pending`: running (or waiting to retry), so poll again.
+        `ready`: finished; there may be zero suggestions.
+        `failed`: every retry failed; the note is saved but has no suggestions.
     Note:
       type: object
-      required: [id, content, entry_date, created_at, updated_at]
+      required: [id, content, entry_date, suggestion_status, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         content: { type: string }
         entry_date: { type: string, format: date }
+        suggestion_status: { $ref: "#/components/schemas/SuggestionStatus" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     NoteDetail:
@@ -627,6 +813,15 @@ components:
       description: |
         A LINKED_TO relationship between two of the user's notes. Suggested, accepted and
         rejected links share this one structure; `status` records the user's decision.
+
+        **Direction:** `source` is the note whose save produced the suggestion, and `target`
+        is the candidate it was matched with. `type` reads from source to target: for
+        example, `supports` means "source supports target", and `example_of` means "source
+        is an example of target". `related` and `contradicts` read the same either way.
+
+        **One link per pair:** there is at most one link between two notes, in either
+        direction. A pair that already has a link with any status, including `rejected`,
+        is never suggested again.
       type: object
       required: [id, source, target, status, type, score, reason, origin, created_at, decided_at]
       properties:
@@ -652,17 +847,11 @@ components:
       type: object
       required: [status, items]
       properties:
-        status:
-          type: string
-          enum: [pending, ready, failed]
-          description: |
-            `pending`: the background job is still running, so poll again.
-            `ready`: the job finished; `items` may be empty.
-            `failed`: every retry failed; the note is saved but has no suggestions.
+        status: { $ref: "#/components/schemas/SuggestionStatus" }
         items:
           type: array
           maxItems: 5
-          description: The note's links with status `suggested`, best score first.
+          description: Links with status `suggested` whose `source` is this note, best score first.
           items: { $ref: "#/components/schemas/Link" }
 
     # ----------------------------------------------------------------- graph
@@ -697,11 +886,15 @@ components:
           description: Defaults to the start of the first question.
     ChatSession:
       type: object
-      required: [id, title, created_at]
+      required: [id, title, created_at, last_message_at]
       properties:
         id: { type: string, format: uuid }
         title: { type: [string, "null"] }
         created_at: { type: string, format: date-time }
+        last_message_at:
+          type: [string, "null"]
+          format: date-time
+          description: Time of the newest message, computed from `chat_messages`. Null if there are none yet.
     ChatSessionList:
       type: object
       required: [items, total]
@@ -746,6 +939,23 @@ components:
         answer: { $ref: "#/components/schemas/ChatMessage" }
 
     # --------------------------------------------------------------- account
+    Health:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks:
+          type: object
+          required: [api, neo4j, postgres]
+          properties:
+            api: { $ref: "#/components/schemas/HealthCheck" }
+            neo4j: { $ref: "#/components/schemas/HealthCheck" }
+            postgres: { $ref: "#/components/schemas/HealthCheck" }
+      example: { status: degraded, checks: { api: ok, neo4j: ok, postgres: down } }
+    HealthCheck:
+      type: string
+      enum: [ok, down]
+
     DeleteAccountRequest:
       type: object
       required: [password]
