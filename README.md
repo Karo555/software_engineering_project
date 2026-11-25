@@ -1,5 +1,7 @@
 # Nodebook
 
+[![CI](https://github.com/Karo555/software_engineering_project/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Karo555/software_engineering_project/actions/workflows/ci.yml?query=branch%3Amain)
+
 Nodebook is a web application that turns daily notes into a personal knowledge graph.
 It suggests links between notes, the user accepts or rejects them, and a query agent
 answers questions about the graph with citations to the source notes.

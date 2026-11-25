@@ -91,6 +91,18 @@ Problems the tools can't fix are printed with the rule name and have to be fixed
 To silence a rule, name it on the line it applies to (`# noqa: B006`,
 `// eslint-disable-next-line <rule>`) and say why. Don't commit with `--no-verify`.
 
+## Continuous integration
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) checks every pull request to `main`.
+To run the same checks before you push:
+
+| Job | Checks | Run locally |
+| --- | --- | --- |
+| Backend | Ruff lint and format | `pre-commit run ruff-check --all-files`, `pre-commit run ruff-format --all-files` |
+| | pytest | `pip install -r requirements-dev.txt`, then `python -m pytest` (in `backend/`) |
+| Frontend | ESLint, Prettier | `npm run lint`, `npm run format:check` (in `frontend/`) |
+| | Vitest | `npm test` (in `frontend/`) |
+
 ## Pull requests
 
 1. Open a pull request into `main` and fill in the template.
