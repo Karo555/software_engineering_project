@@ -61,6 +61,48 @@ Rebase on `main` (or merge `main` into your branch) before asking for review.
 - Make each commit one logical change. Don't mix formatting with behaviour changes.
 - Never commit secrets, `.env` files, API keys or database dumps.
 
+## Linting and formatting
+
+Style is set by tools, so reviews don't have to discuss it.
+
+| Code | Tools | Configuration |
+| --- | --- | --- |
+| `backend/` | Ruff (lint and format) | `backend/ruff.toml` |
+| `frontend/` | ESLint (lint), Prettier (format) | `frontend/eslint.config.js`, `frontend/.prettierrc.json` |
+
+[pre-commit](https://pre-commit.com) runs them on the files in each commit. Set it up once
+per clone. You need Python, and Node 22 or 24 for the frontend hooks:
+
+```bash
+pip install pre-commit        # or: uv tool install pre-commit
+pre-commit install            # run the hooks on every git commit
+npm ci --prefix frontend      # needed only if you commit frontend files
+```
+
+If a hook changes a file, the commit stops. Check the change, `git add` it and commit again.
+Problems the tools can't fix are printed with the rule name and have to be fixed by hand.
+
+| To do this | Run |
+| --- | --- |
+| Check the whole repository | `pre-commit run --all-files` |
+| Run one hook | `pre-commit run ruff-check --all-files` (or `ruff-format`, `eslint`, `prettier`) |
+| Frontend only | `npm run lint`, `npm run format` (in `frontend/`) |
+
+To silence a rule, name it on the line it applies to (`# noqa: B006`,
+`// eslint-disable-next-line <rule>`) and say why. Don't commit with `--no-verify`.
+
+## Continuous integration
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) checks every pull request to `main`.
+To run the same checks before you push:
+
+| Job | Checks | Run locally |
+| --- | --- | --- |
+| Backend | Ruff lint and format | `pre-commit run ruff-check --all-files`, `pre-commit run ruff-format --all-files` |
+| | pytest | `pip install -r requirements-dev.txt`, then `python -m pytest` (in `backend/`) |
+| Frontend | ESLint, Prettier | `npm run lint`, `npm run format:check` (in `frontend/`) |
+| | Vitest | `npm test` (in `frontend/`) |
+
 ## Pull requests
 
 1. Open a pull request into `main` and fill in the template.

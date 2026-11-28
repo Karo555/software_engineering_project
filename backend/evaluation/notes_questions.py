@@ -186,9 +186,7 @@ test_cases = [
     },
     {
         "id": "q23",
-        "question": (
-            "Which dynasty ruled Poland in the 12th century, and whom did Mieszko marry?"
-        ),
+        "question": ("Which dynasty ruled Poland in the 12th century, and whom did Mieszko marry?"),
         "expected_note_ids": ["piast_dynasty", "mieszko"],
     },
     {
